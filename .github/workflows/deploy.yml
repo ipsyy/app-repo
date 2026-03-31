@@ -1,0 +1,66 @@
+name: "Deploy"
+
+on:
+  workflow_run:
+    workflows: ["Build & Test"]
+    types: [completed]
+    branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+env:
+  TF_VERSION: "1.7.0"
+
+jobs:
+  deploy:
+    name: "Deploy"
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout infra-repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/infra-repo
+          token: ${{ secrets.INFRA_REPO_PAT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Set environment name
+        id: env_name
+        run: echo "name=${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_OUTPUT
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var-file="environments/${{ steps.env_name.outputs.name }}/terraform.tfvars" \
+            -var="mysql_root_password=${{ secrets.MYSQL_ROOT_PASSWORD }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="app_repo_path=${{ secrets.APP_REPO_PATH }}" \
+            -no-color \
+            -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Show outputs
+        run: terraform output
+        
