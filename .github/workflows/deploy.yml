@@ -12,6 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install & Build
+        working-directory: ./frontend
         run: |
           npm install
           npm run build
@@ -23,9 +24,9 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 443
-          source: "dist/*"
+          source: "frontend/dist/*"
           target: "/app/frontend"
-          strip_components: 1
+          strip_components: 2
 
       - name: Finalize Deployment on Server
         uses: appleboy/ssh-action@master
